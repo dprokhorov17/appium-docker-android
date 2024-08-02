@@ -30,6 +30,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # zip
 #   Make a zip file
 #==================
+# Add openssh-server to the list of packages
 RUN apt-get -qqy update && \
     apt dist-upgrade -y && \
     apt-get -qqy --no-install-recommends install \
@@ -46,7 +47,22 @@ RUN apt-get -qqy update && \
     xvfb \
     zip \
     ffmpeg \
-  && rm -rf /var/lib/apt/lists/*
+    openssh-server \
+    netcat \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up SSH server
+RUN mkdir /var/run/sshd
+RUN echo 'root:root' | chpasswd
+RUN sed -i 's/#AllowTcpForwarding yes /AllowTcpForwarding yes/' /etc/ssh/sshd_config
+RUN sed -i 's/#GatewayPorts no /GatewayPorts yes/' /etc/ssh/sshd_config
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+# SSH login fix. Otherwise user is kicked off after login
+RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+# Expose SSH port
+EXPOSE 22
 
 #===============
 # Set JAVA_HOME
@@ -132,12 +148,16 @@ RUN chown -R 1300:1301 /usr/lib/node_modules/appium
 ENV SCRIPT_PATH="appium-docker-android"
 RUN mkdir -p ${SCRIPT_PATH}
 COPY start.sh \
+     start_appium.sh \
      generate_selenium_config.sh \
      wireless_autoconnect.sh \
      wireless_connect.sh \
      ${SCRIPT_PATH}/
 RUN chown -R 1300:1301 ${SCRIPT_PATH}
 ENV APP_PATH=/home/androidusr/${SCRIPT_PATH}
+
+# Ensure the start script has execute permissions
+#RUN chmod +x ${SCRIPT_PATH}/start.sh
 
 #==================
 # Use created user
